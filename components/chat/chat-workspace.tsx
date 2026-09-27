@@ -95,7 +95,14 @@ interface ChatPanelProps {
  */
 function ChatPanel({ conversation, people, me }: ChatPanelProps) {
   const messages = useMessages(conversation.id);
-  const { send, isPending: isSending, typingIds } = useSendMessage(conversation.id);
+  // The hook needs the participants and the thread so far, because the replies
+  // are generated in character from those rather than picked at random.
+  const { send, isPending: isSending, typingIds } = useSendMessage({
+    conversation,
+    people,
+    me,
+    history: messages.data ?? [],
+  });
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white">

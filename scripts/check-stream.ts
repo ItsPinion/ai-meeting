@@ -31,16 +31,34 @@ class MemoryStorage implements Storage {
 // @ts-expect-error minimal browser shim
 globalThis.window = { localStorage: new MemoryStorage() };
 
-const { resetStore } = await import("../lib/chat/storage");
+const { resetStore, readStore } = await import("../lib/chat/storage");
 const { sendMessage } = await import("../lib/chat/api");
 
 resetStore();
+
+/** The API needs the participants and the thread to answer in character. */
+function contextFor(conversationId: string) {
+  const store = readStore();
+  const conversation = store.conversations.find((c) => c.id === conversationId);
+  if (!conversation) throw new Error(`no conversation ${conversationId}`);
+  return {
+    conversation,
+    people: store.people,
+    me: store.me,
+    history: store.messages[conversationId] ?? [],
+  };
+}
 
 const events: string[] = [];
 const start = Date.now();
 
 const result = await sendMessage(
-  { conversationId: "launch", text: "who is on for the launch review?", id: "stream-1" },
+  {
+    conversationId: "launch",
+    text: "who is on for the launch review?",
+    id: "stream-1",
+    context: contextFor("launch"),
+  },
   {
     onSent: (message) => events.push(`sent:${message.id}:${message.status}`),
     onTypingStart: (authorId) => events.push(`typing+${authorId}`),

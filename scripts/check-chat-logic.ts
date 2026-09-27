@@ -34,7 +34,27 @@ globalThis.window = { localStorage: storage };
 
 const { readStore, resetStore } = await import("../lib/chat/storage");
 const { STORAGE_KEY } = await import("../lib/chat/constants");
-const { fetchDirectory, fetchMessages, sendMessage } = await import("../lib/chat/api");
+const {
+  fetchDirectory,
+  fetchMessages,
+  sendMessage,
+  fallbackReply,
+} = await import("../lib/chat/api");
+const { personas } = await import("../lib/chat/personas");
+const { buildSystemInstruction } = await import("../lib/chat/personas");
+
+/** Builds the ReplyContext the API now needs. */
+function contextFor(conversationId: string) {
+  const store = readStore();
+  const conversation = store.conversations.find((c) => c.id === conversationId);
+  if (!conversation) throw new Error(`no conversation ${conversationId}`);
+  return {
+    conversation,
+    people: store.people,
+    me: store.me,
+    history: store.messages[conversationId] ?? [],
+  };
+}
 
 let failures = 0;
 function check(label: string, condition: boolean, detail?: unknown) {
@@ -77,7 +97,12 @@ check("unknown conversation returns []", (await fetchMessages("nope")).length ==
 // --- direct message reply ------------------------------------------------
 console.log("\ndirect message");
 const dmStart = (await fetchMessages("maya")).length;
-const dm = await sendMessage({ conversationId: "maya", text: "  Thursday works  ", id: "dm-1" });
+const dm = await sendMessage({
+  conversationId: "maya",
+  text: "  Thursday works  ",
+  id: "dm-1",
+  context: contextFor("maya"),
+});
 check("outgoing message is trimmed and stored", dm.message.text === "Thursday works", dm.message.text);
 check("outgoing message is mine", dm.message.authorId === "me");
 check("exactly one reply in a DM", dm.replies.length === 1, dm.replies.length);
@@ -95,6 +120,7 @@ for (let run = 0; run < 40; run += 1) {
     conversationId: "design",
     text: `ping ${run}`,
     id: `grp-${run}`,
+    context: contextFor("design"),
   });
   counts.push(result.replies.length);
   {
@@ -124,6 +150,55 @@ check("group replies are between 1 and 3", min >= 1 && max <= 3, { min, max });
 check("group reply count varies", min !== max, { min, max });
 check("more than one responder happens", max > 1, { max });
 console.log(`  info reply-count distribution: ${JSON.stringify(counts.reduce<Record<number, number>>((acc, n) => ({ ...acc, [n]: (acc[n] ?? 0) + 1 }), {}))}`);
+
+
+// --- personas --------------------------------------------------------------
+console.log("\npersonas");
+const seededPeople = readStore().people;
+check(
+  "every seeded person has a persona",
+  seededPeople.every((person) => Boolean(personas[person.id])),
+  seededPeople.map((person) => person.id).join(","),
+);
+check(
+  "every seeded person has a role label",
+  seededPeople.every((person) => Boolean(person.role)),
+);
+check(
+  "every persona has a non-trivial system instruction",
+  Object.values(personas).every((persona) => persona.systemInstruction.length > 120),
+);
+check(
+  "every persona has fallback lines",
+  Object.values(personas).every((persona) => persona.fallbackLines.length > 0),
+);
+
+// Two different people must not be able to produce the same line.
+const fallbackLines = Object.keys(personas).map((id) => fallbackReply(id));
+check("fallback lines are distinct per persona", new Set(fallbackLines).size === fallbackLines.length, fallbackLines);
+
+const mayaInstruction = buildSystemInstruction({
+  persona: personas.maya,
+  authorName: "Maya Chen",
+  kind: "group",
+  conversationName: "Design team",
+  otherMemberNames: ["Sam Williams", "Olivia Martinez", "Jamie Davis"],
+});
+check("group instruction names the group", mayaInstruction.includes("Design team"), mayaInstruction);
+check("group instruction names the others", mayaInstruction.includes("Sam Williams"), mayaInstruction);
+check("instruction forbids markdown", /markdown/i.test(mayaInstruction));
+check("instruction asks for one short message", /1-2 short sentences/.test(mayaInstruction));
+
+const dmInstruction = buildSystemInstruction({
+  persona: personas.maya,
+  authorName: "Maya Chen",
+  kind: "dm",
+  otherMemberNames: ["Jamie Davis"],
+});
+check("dm instruction names the counterpart", dmInstruction.includes("Jamie Davis"), dmInstruction);
+
+// Maya's identity must survive into whatever is sent to the model.
+check("persona text is carried into the instruction", mayaInstruction.includes("product designer"), mayaInstruction);
 
 // --- persistence ----------------------------------------------------------
 console.log("\npersistence");

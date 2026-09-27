@@ -16,6 +16,8 @@ export interface Person {
   /** Tailwind classes used for the avatar background and label. */
   color: string;
   online?: boolean;
+  /** Short role label, e.g. "Product designer". */
+  role?: string;
 }
 
 export type ConversationKind = "dm" | "group";

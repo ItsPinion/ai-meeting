@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun scripts/check-chat-logic.ts && bun scripts/check-stream.ts",
+    "test:route": "bun scripts/check-reply-route.ts",
     "test:ui": "bun scripts/check-ui.ts"
   },
   "dependencies": {

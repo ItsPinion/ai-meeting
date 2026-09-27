@@ -5,6 +5,7 @@ import { ChevronDown, Edit3, MoreHorizontal, RotateCcw, Search } from "lucide-re
 
 import { cn } from "@/lib/utils";
 import { useDirectory } from "@/hooks/use-directory";
+import { useGeminiStatus } from "@/hooks/use-gemini-status";
 import { useResetChat } from "@/hooks/use-reset-chat";
 import { ConversationListItem } from "@/components/chat/conversation-list-item";
 import type { Conversation } from "@/lib/chat/types";
@@ -28,6 +29,7 @@ export function ConversationSidebar({ selectedId, onSelect }: ConversationSideba
   const [filter, setFilter] = useState<FilterId>("all");
   const { data, isPending, isError } = useDirectory();
   const reset = useResetChat();
+  const gemini = useGeminiStatus();
 
   const conversations = useMemo(() => {
     const all = data?.conversations ?? [];
@@ -139,6 +141,14 @@ export function ConversationSidebar({ selectedId, onSelect }: ConversationSideba
           </p>
         )}
       </nav>
+
+      {/* Replies still work without a key, but say so rather than letting the
+          app quietly fall back to placeholder lines. */}
+      {gemini.data === false && (
+        <p className="border-t border-[#eaebef] px-6 py-3 text-[11px] leading-relaxed text-[#9a9da6]">
+          Gemini is not configured — replies use in-character placeholder lines.
+        </p>
+      )}
 
       <div className="flex items-center gap-3 border-t border-[#eaebef] px-6 py-5">
         {me && (

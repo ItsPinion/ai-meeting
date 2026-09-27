@@ -3,7 +3,12 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
-import { createMessageId, nowLabel, sendMessage } from "@/lib/chat/api";
+import {
+  createMessageId,
+  nowLabel,
+  sendMessage,
+  type ReplyContext,
+} from "@/lib/chat/api";
 import { chatKeys } from "@/lib/chat/keys";
 import { ME_ID, type Message } from "@/lib/chat/types";
 
@@ -27,7 +32,8 @@ interface SendVariables {
  * 3. Replies stream in through `onReply` into the same cache entry, so the list
  *    grows while `isPending` stays true.
  */
-export function useSendMessage(conversationId: string) {
+export function useSendMessage(context: ReplyContext) {
+  const conversationId = context.conversation.id;
   const queryClient = useQueryClient();
   const [typingIds, setTypingIds] = useState<string[]>([]);
   const messagesKey = chatKeys.messages(conversationId);
@@ -38,7 +44,17 @@ export function useSendMessage(conversationId: string) {
   const mutation = useMutation({
     mutationFn: ({ text, id }: SendVariables) =>
       sendMessage(
-        { conversationId, text, id },
+        {
+          conversationId,
+          text,
+          id,
+          context: {
+            ...context,
+            // The outgoing message is the `prompt`, so it must not also appear
+            // in the history we replay to the model.
+            history: context.history.filter((message) => message.id !== id),
+          },
+        },
         {
           onSent: (message) => {
             patchMessage(queryClient, messagesKey, message.id, () => ({
